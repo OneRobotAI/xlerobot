@@ -67,9 +67,10 @@ class XLerobotConfig(RobotConfig):
     use_degrees: bool = False
 
     # Mecanum X base: half wheelbase (m), half track (m), wheel radius (m).
+    # Wheelbase / track = full distances between wheel centers (front↔rear, left↔right).
     wheel_radius_m: float = 0.05
-    half_wheelbase_m: float = 0.12
-    half_track_m: float = 0.26
+    half_wheelbase_m: float = 0.119  # 238 mm / 2
+    half_track_m: float = 0.2675  # 535 mm / 2
     # Optional per-motor ±1 after kinematics; keep (1,1,1,1) if wiring is baked into _mecanum_M (see xlerobot.py).
     base_wheel_signs: Tuple[float, float, float, float] = (1.0, 1.0, 1.0, 1.0)
     max_wheel_raw_command: int = 3000
