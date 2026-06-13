@@ -1,126 +1,124 @@
-# SmolVLA × XLeRobot 训练与推理指南
+# SmolVLA × XLeRobot Training & Inference Guide
 
-> **版本**: 1.0 | 适用: XLeRobot (双臂 SO-100) + SmolVLA 450M
+> **Version**: 1.0 | Compatible with: XLeRobot (Dual SO-100 Arms) + SmolVLA 450M
 >
-> 硬件准备、环境搭建、数据采集等通用步骤请见 `shared/GUIDE.md`。
-> 本文档仅包含 SmolVLA 特有的训练和推理部署部分。
+> For hardware setup, environment installation, and data collection, see `shared/GUIDE.md`.
+> This document covers SmolVLA-specific training and inference deployment only.
 
 ---
 
-## 📋 目录
+## 📋 Table of Contents
 
-- [第一章：SmolVLA 简介](#第一章smolvla-简介)
-- [第二章：模型训练](#第二章模型训练)
-- [第三章：推理服务部署](#第三章推理服务部署)
-- [附录A：常见错误](#附录a常见错误)
-- [附录B：概念参考](#附录b概念参考)
-- [附录C：命令速查表](#附录c命令速查表)
-
----
-
-## 第一章：SmolVLA 简介
-
-SmolVLA (450M) 是 HuggingFace 推出的轻量级 Vision-Language-Action 模型，基于 SmolVLM2-500M 视觉语言编码器和 Flow Matching 动作专家。
-
-### 核心优势
-
-| 特性 | 说明 |
-|------|------|
-| 参数量 | **450M**（VLM ~350M + Action Expert ~100M） |
-| 训练目标 | Flow Matching（连续动作空间，非自回归） |
-| 推理显存 | **~6GB**，RTX 3090/4090 可达 20-30Hz |
-| 异步推理 | 原生支持（RTC），任务完成快 30% |
-| LoRA 支持 | ~3GB VRAM 即可微调 |
-| 社区数据集 | 487 个公开数据集可供参考 |
-| DOF 上限 | **32-DOF**（XLeRobot 16/17-DOF 自动适配） |
-
-### 与同类模型对比
-
-| 对比项 | SmolVLA 450M | X-VLA 0.9B | ACT/DP |
-|-------|-------------|-----------|--------|
-| 参数量 | **450M** | 0.9B | ~80M |
-| 单卡 4090 训练 | ✅ ~9GB | ✅ ~9GB | ✅ 4-6GB |
-| 异步推理 | ✅ 原生 | ❌ 需自建 | ❌ |
-| 推理显存 | **~6GB** | ~9GB | ~2GB |
-| LeRobot 集成 | ✅ 原生 | ✅ 原生 | ✅ 原生 |
-
-> 硬件相关步骤（校准、数据采集等）请移步 `shared/GUIDE.md`。
+- [Chapter 1: SmolVLA Overview](#chapter-1-smolvla-overview)
+- [Chapter 2: Model Training](#chapter-2-model-training)
+- [Chapter 3: Inference Deployment](#chapter-3-inference-deployment)
+- [Appendix A: Common Errors](#appendix-a-common-errors)
+- [Appendix B: Reference](#appendix-b-reference)
+- [Appendix C: Command Reference](#appendix-c-command-reference)
 
 ---
 
-## 第二章：模型训练
+## Chapter 1: SmolVLA Overview
 
-### 2.1 训练说明
+SmolVLA (450M) is HuggingFace's lightweight Vision-Language-Action model, based on the SmolVLM2-500M vision-language encoder with a Flow Matching action expert.
 
-SmolVLA 在 LeRobot 里只有一种训练模式，没有"轻量/全量"之分。`freeze_vision_encoder` 和 `train_expert_only` 已经是模型 config 的默认值，无需手动指定。
+### Key Advantages
 
-训练时冻结视觉编码器，只训练动作专家（Action Expert），~9GB VRAM，单卡 4090 约 4 小时（20000 steps）。
+| Feature | Description |
+|---------|-------------|
+| Parameters | **450M** (VLM ~350M + Action Expert ~100M) |
+| Training Objective | Flow Matching (continuous, non-autoregressive) |
+| Inference VRAM | **~6GB**, 20-30Hz on RTX 3090/4090 |
+| Async Inference | Native support (RTC), ~30% faster task completion |
+| LoRA Support | ~3GB VRAM for fine-tuning |
+| Community Datasets | 487 public datasets available for reference |
+| DOF Limit | **32-DOF** (XLeRobot 16/17-DOF auto-adapts) |
 
-#### 训练原理
+### Comparison
+
+| Metric | SmolVLA 450M | X-VLA 0.9B | ACT/DP |
+|--------|-------------|-----------|--------|
+| Parameters | **450M** | 0.9B | ~80M |
+| Single 4090 Training | ✅ ~9GB | ✅ ~9GB | ✅ 4-6GB |
+| Async Inference | ✅ Native | ❌ DIY | ❌ |
+| Inference VRAM | **~6GB** | ~9GB | ~2GB |
+| LeRobot Integration | ✅ Native | ✅ Native | ✅ Native |
+
+> For hardware setup (calibration, data collection), see `shared/GUIDE.md`.
+
+---
+
+## Chapter 2: Model Training
+
+### 2.1 Training Overview
+
+SmolVLA has a single training mode in LeRobot — no "light/full" distinction. `freeze_vision_encoder` and `train_expert_only` are already the model config defaults and don't need to be specified manually.
+
+Training freezes the vision encoder and only trains the Action Expert. ~9GB VRAM, ~4 hours on a single RTX 4090 (20000 steps).
+
+#### Training Architecture
 
 ```
-SmolVLA 训练流程:
-
-输入                             输出
+Input                            Output
 ┌──────┐                       ┌──────────┐
-│ 图像  │───┐                 ┌→│ 动作序列  │
-│ 3路   │   │  ┌───────────┐ │ │ (50步)   │
+│ Image │───┐                 ┌→│ Actions  │
+│ 3 cams│   │  ┌───────────┐ │ │ (50-step)│
 └──────┘   ├─→│ SmolVLM2   │ │ └──────────┘
-┌──────┐   │  │ 视觉语言    │ │
-│ 语言  │───┘  │ 编码器     │ │ ┌──────────┐
-│指令   │      │ (冻结)     │ │→│ Flow      │
+┌──────┐   │  │ Vision-Lang│ │
+│ Lang  │───┘  │ Encoder   │ │ ┌──────────┐
+│ Instr │      │ (Frozen)  │ │→│ Flow      │
 └──────┘      └───────────┘ │ │ Matching  │
-┌──────┐                    │ │ 动作专家   │
-│关节状│────────────────────┘ │ (可训练)   │
-│态    │                      └──────────┘
-└──────┘
+┌──────┐                    │ │ Action    │
+│ Joint │────────────────────┘ │ Expert    │
+│ State │                      │(Trainable)│
+└──────┘                       └──────────┘
 ```
 
-- **SmolVLM2-500M**：SigLIP 视觉编码器 + SmolLM2 语言解码器
-- **Flow Matching**：连续扩散过程，从噪声逐步去噪到动作
-- **Action Expert**：带交叉注意力/自注意力的 Transformer
+- **SmolVLM2-500M**: SigLIP vision encoder + SmolLM2 language decoder
+- **Flow Matching**: Continuous diffusion process, denoises from noise to actions
+- **Action Expert**: Transformer with interleaved cross/self-attention
 
-### 2.2 执行训练
+### 2.2 Running Training
 
-#### 环境准备
+#### Environment Setup
 
 ```bash
-# 安装 SmolVLA 依赖
+# Install SmolVLA dependencies
 cd /home/zach/lerobot
 pip install -e ".[smolvla]"
 
-# 或直接 pip 安装
+# Or via pip
 pip install 'lerobot[smolvla]'
 ```
 
-#### 训练命令
+#### Training Command Reference
 
-训练在本地 GPU 或云服务器上运行。使用 `train.sh`，支持以下参数：
+Run training on a local GPU or cloud server. Uses `train.sh` with the following parameters:
 
-| 参数 | 说明 | 示例 |
-|------|------|------|
-| `--dataset` | 数据集 ID | `your/xlerobot-clean-table` |
-| `--model-path` | 基座模型 | `lerobot/smolvla_base` |
-| `--output-dir` | 输出目录 | `./outputs/smolvla_xlerobot` |
-| `--rename-map` | 摄像头键名映射 | 见下方说明 |
+| Parameter | Description | Example |
+|-----------|-------------|---------|
+| `--dataset` | Dataset repo ID | `your/xlerobot-clean-table` |
+| `--model-path` | Base model | `lerobot/smolvla_base` |
+| `--output-dir` | Output directory | `./outputs/smolvla_xlerobot` |
+| `--rename-map` | Camera key mapping | See below |
 
-**摄像头键名映射：**
+**Camera Key Mapping:**
 
-SmolVLA 期望的摄像头键名是 `camera1`、`camera2`、`camera3`，需要通过 `--rename-map` 映射：
+SmolVLA expects camera keys `camera1`, `camera2`, `camera3`. Use `--rename-map`:
 
 ```bash
-# XLerobot（2轮/3轮版）：top, left_wrist, right_wrist
+# XLerobot (2/3-wheel): top, left_wrist, right_wrist
 --rename-map '{"observation.images.top": "observation.images.camera1",
                "observation.images.left_wrist": "observation.images.camera2",
                "observation.images.right_wrist": "observation.images.camera3"}'
 
-# LeRobot 双臂：left_top, left_wrist, right_wrist
+# LeRobot bimanual: left_top, left_wrist, right_wrist
 --rename-map '{"observation.images.left_top": "observation.images.camera1",
                "observation.images.left_wrist": "observation.images.camera2",
                "observation.images.right_wrist": "observation.images.camera3"}'
 ```
 
-#### 训练示例
+#### Training Example
 
 ```bash
 cd ~/smolvla_deploy
@@ -134,7 +132,7 @@ bash train.sh \
                  "observation.images.right_wrist": "observation.images.camera3"}'
 ```
 
-实际执行的是：
+This executes:
 
 ```bash
 lerobot-train \
@@ -149,7 +147,7 @@ lerobot-train \
                  "observation.images.right_wrist": "observation.images.camera3"}'
 ```
 
-#### 训练日志解读
+#### Training Log Interpretation
 
 ```
 Step 1/20000 | loss: 0.95 | lr: 1e-4 | VRAM: 8.5GB | 3.5 it/s
@@ -158,23 +156,23 @@ Step 5000/20000 | loss: 0.21 | lr: 1e-4 | VRAM: 8.6GB | 3.5 it/s
 Step 10000/20000 | loss: 0.12 | lr: 1e-4 | VRAM: 8.6GB | 3.4 it/s
 ```
 
-**loss 解读：**
-- 初始 ~0.95：模型刚开始，预测不准确
-- 下降到 ~0.2：模型开始理解任务模式
-- 稳定在 ~0.1：训练收敛
+**Loss interpretation:**
+- Initial ~0.95: Model just starting
+- Drops to ~0.2: Model begins to understand the task
+- Stabilizes at ~0.1: Training converges
 
-#### 训练完成
+#### Training Complete
 
 ```
 ✅ Training complete!
   Model saved to: ./outputs/smolvla_xlerobot
   Checkpoints:    ./outputs/smolvla_xlerobot/checkpoints
-  
-  best/  ← 用于推理部署
-  last/  ← 可用于继续训练
+
+  best/  ← Use for inference deployment
+  last/  ← Can continue training
 ```
 
-### 2.3 监控训练
+### 2.3 Monitoring Training
 
 ```bash
 conda activate lerobot
@@ -183,34 +181,34 @@ tensorboard --logdir=./outputs/smolvla_xlerobot/logs --port=6006
 
 ---
 
-## 第三章：推理服务部署
+## Chapter 3: Inference Deployment
 
-### 3.1 本地推理
+### 3.1 Local Inference
 
-#### 终端 1：启动推理服务
+#### Terminal 1: Start Inference Server
 
 ```bash
 cd /home/zach/XLeRobot/smolvla_deploy
 conda activate lerobot
 
-# 用微调好的模型
+# Use a fine-tuned model
 python server.py \
   --model-path ./outputs/smolvla_xlerobot/checkpoints/best \
   --port 8000
 
-# 或使用预训练 base 模型（仅 6-DOF 单臂，用于测试）
+# Or use the pretrained base model (6-DOF single arm, for testing)
 python server.py --model-path lerobot/smolvla_base --port 8000
 ```
 
-**server.py 参数：**
+**server.py parameters:**
 ```
---model-path PATH  模型路径或 HF ID (默认: lerobot/smolvla_base)
---port INT         服务端口 (默认: 8000)
---host TEXT        绑定地址 (默认: 0.0.0.0)
---device TEXT      推理设备 (默认: auto)
+--model-path PATH  Model path or HF ID (default: lerobot/smolvla_base)
+--port INT         Server port (default: 8000)
+--host TEXT        Bind address (default: 0.0.0.0)
+--device TEXT      Inference device (default: auto)
 ```
 
-#### 终端 2：运行客户端
+#### Terminal 2: Run Client
 
 ```bash
 cd /home/zach/XLeRobot/smolvla_deploy
@@ -221,45 +219,45 @@ python client.py \
   --task "clean table"
 ```
 
-**client.py 参数：**
+**client.py parameters:**
 ```
---server-url URL     SmolVLA 推理服务地址 (默认: http://localhost:8000)
---task TEXT          语言指令 (默认: "clean table")
---control-freq FLOAT 控制频率 Hz (默认: 30)
---smooth-ratio FLOAT 动作平滑系数 (默认: 0.3)
---port1 PATH         左臂总线端口 (默认: /dev/ttyACM0)
---port2 PATH         右臂总线端口 (默认: /dev/ttyACM1)
+--server-url URL     SmolVLA server URL (default: http://localhost:8000)
+--task TEXT          Language instruction (default: "clean table")
+--control-freq FLOAT Control frequency Hz (default: 30)
+--smooth-ratio FLOAT Action smoothing ratio (default: 0.3)
+--port1 PATH         Left arm bus port (default: /dev/ttyACM0)
+--port2 PATH         Right arm bus port (default: /dev/ttyACM1)
 ```
 
-### 3.2 远程推理
+### 3.2 Remote Inference
 
-#### 云服务器：启动推理服务
+#### Cloud Server: Start Inference Service
 
 ```bash
 conda activate lerobot
 cd ~/smolvla_deploy
 
-# 上传本地模型到云服务器
-scp -P <端口> -r /home/zach/XLeRobot/smolvla_deploy/outputs/xxx/checkpoints/best \
-  featurize@<IP>:~/smolvla_deploy/my_model/
+# Upload local model to cloud server
+scp -P <port> -r /home/zach/XLeRobot/smolvla_deploy/outputs/xxx/checkpoints/best \
+  featurize@<ip>:~/smolvla_deploy/my_model/
 
-# 启动服务
+# Start service
 python server.py --model-path ~/smolvla_deploy/my_model --port 8000
 ```
 
-#### 本地电脑：SSH 隧道 + 客户端
+#### Local: SSH Tunnel + Client
 
 ```bash
-# SSH 隧道
-ssh -N -f -L 8000:localhost:8000 featurize@<IP> -p <端口>
+# SSH tunnel
+ssh -N -f -L 8000:localhost:8000 featurize@<ip> -p <port>
 
-# 运行客户端
+# Run client
 cd /home/zach/XLeRobot/smolvla_deploy
 conda activate lerobot
 python client.py --server-url http://localhost:8000 --task "clean table"
 ```
 
-### 3.3 验证服务
+### 3.3 Verify Service
 
 ```bash
 curl http://localhost:8000/health
@@ -267,32 +265,32 @@ curl http://localhost:8000/health
 #    "state_dim":16,"action_dim":16,"chunk_size":50}
 ```
 
-### 3.4 后台运行
+### 3.4 Running in Background
 
 ```bash
 nohup python server.py \
   --model-path ./outputs/smolvla_xlerobot/checkpoints/best \
   --port 8000 > server.log 2>&1 &
 
-tail -f server.log   # 查看日志
-kill %1              # 停止服务
+tail -f server.log   # View logs
+kill %1              # Stop server
 ```
 
-> 云服务器的端口开放方式各异，请参照各平台文档操作（AutoDL 自定义服务、Featurize 端口映射等）。
+> Cloud platform port exposure varies. Refer to your platform's documentation (AutoDL custom service, Featurize port mapping, etc.).
 
 ---
 
-## 附录A：常见错误
+## Appendix A: Common Errors
 
-### 训练时报错
+### Training Errors
 
 #### "CUDA out of memory"
 
 ```bash
-# 减小 batch size
+# Reduce batch size
 lerobot-train --batch_size=16 ...
 
-# 启用梯度检查点
+# Enable gradient checkpointing
 --policy.gradient_checkpointing=true
 ```
 
@@ -302,13 +300,13 @@ lerobot-train --batch_size=16 ...
 export LEROBOT_CACHE=/data/datasets
 ```
 
-### 推理时报错
+### Inference Errors
 
 #### "Connection refused"
 
 ```bash
-ps aux | grep server.py    # 服务在运行？
-netstat -tlnp | grep 8000  # 端口在监听？
+ps aux | grep server.py    # Check if server is running
+netstat -tlnp | grep 8000  # Check if port is listening
 ```
 
 #### "Model not loaded"
@@ -320,104 +318,104 @@ huggingface-cli whoami
 
 ---
 
-## 附录B：概念参考
+## Appendix B: Reference
 
-### B.1 SmolVLA 模型架构
+### B.1 SmolVLA Model Architecture
 
 ```
-输入                          输出
+Input                           Output
 ┌──────┐                    ┌──────────┐
-│ 图像  │───┐              ┌→│ action 1 │
-│ 3路   │   │  ┌─────────┐ │ └──────────┘
+│ Image │───┐              ┌→│ action 1 │
+│ 3 cams│   │  ┌─────────┐ │ └──────────┘
 └──────┘   ├─→│ SmolVLM2 │ │ ┌──────────┐
 ┌──────┐   │  │ 500M     │→│→│ action 2 │
-│ 语言  │───┘  │ VLM     │ │ └──────────┘
-│指令   │      │ (冻结)   │ │ ┌──────────┐
+│ Lang  │───┘  │ VLM     │ │ └──────────┘
+│ Instr │      │ (Frozen) │ │ ┌──────────┐
 └──────┘      └────┬────┘ │→│ ...      │
                    │      │ └──────────┘
 ┌──────┐      ┌────┴────┐ │ ┌──────────┐
-│关节状│─────→│ Action  │ └→│ action 50│
-│态    │      │ Expert  │   └──────────┘
-└──────┘      │ (可训练)│
+│ Joint │─────→│ Action  │ └→│ action 50│
+│ State │      │ Expert  │   └──────────┘
+└──────┘      │(Train.) │
               └─────────┘
 ```
 
-- **SmolVLM2-500M**：HuggingFace 视觉语言模型（SigLIP 视觉编码器 + SmolLM2 语言解码器）
-- **Action Expert**：Flow Matching Transformer，交替交叉注意力和自注意力层
-- **输出**：50 步连续动作序列（chunk_size=50）
+- **SmolVLM2-500M**: HuggingFace vision-language model (SigLIP visual encoder + SmolLM2 language decoder)
+- **Action Expert**: Flow Matching Transformer with interleaved cross/self-attention layers
+- **Output**: 50-step continuous action chunk (chunk_size=50)
 
-### B.2 动作空间
+### B.2 Action Space
 
-SmolVLA 支持最高 **32-DOF** 的动作/状态空间，自动适配 XLeRobot：
+SmolVLA supports up to **32-DOF** action/state spaces, auto-adapting to XLeRobot:
 
-| 版本 | DOF | 分布 | SmolVLA 处理 |
-|------|-----|------|-------------|
-| 2轮差速版 | **16-DOF** | 12手臂 + 2头部 + 2底盘 | 训练时 pad→32，推理时 trim→16 |
-| 3轮全向版 | **17-DOF** | 12手臂 + 2头部 + 3底盘 | 训练时 pad→32，推理时 trim→17 |
-| 双臂标准版 | **12-DOF** | 6左臂 + 6右臂 | 训练时 pad→32，推理时 trim→12 |
+| Version | DOF | Distribution | SmolVLA Handling |
+|---------|-----|-------------|-----------------|
+| 2-wheel diff drive | **16-DOF** | 12 arms + 2 head + 2 base | Pad→32 for training, trim→16 for inference |
+| 3-wheel omni | **17-DOF** | 12 arms + 2 head + 3 base | Pad→32 for training, trim→17 for inference |
+| Bimanual standard | **12-DOF** | 6 left + 6 right arms | Pad→32 for training, trim→12 for inference |
 
-### B.3 摄像头配置
+### B.3 Camera Configuration
 
-SmolVLA 期望的摄像头键名：`camera1`、`camera2`、`camera3`
+SmolVLA expects camera keys: `camera1`, `camera2`, `camera3`
 
-| SmolVLA 键名 | XLeRobot 键名 | 位置 |
-|-------------|--------------|------|
-| `observation.images.camera1` | `top` / `left_top` | 头顶全局 |
-| `observation.images.camera2` | `left_wrist` | 左手腕 |
-| `observation.images.camera3` | `right_wrist` | 右手腕 |
+| SmolVLA Key | XLeRobot Key | Position |
+|-------------|--------------|----------|
+| `observation.images.camera1` | `top` / `left_top` | Overhead global view |
+| `observation.images.camera2` | `left_wrist` | Left wrist |
+| `observation.images.camera3` | `right_wrist` | Right wrist |
 
 ---
 
-## 附录C：命令速查表
+## Appendix C: Command Reference
 
-### 训练
+### Training
 
 ```bash
-# 基础训练
+# Basic training
 bash train.sh --dataset your/dataset
 
-# 指定模型和输出目录
+# Custom model and output dir
 bash train.sh --dataset your/dataset --model-path lerobot/smolvla_base \
   --output-dir ./outputs/smolvla_xxx
 ```
 
-### 推理
+### Inference
 
 ```bash
-# 启动服务
+# Start server
 python server.py --model-path ./outputs/smolvla_xlerobot/checkpoints/best --port 8000
 
-# 后台运行
+# Run in background
 nohup python server.py --model-path ... --port 8000 > server.log 2>&1 &
 
-# 测试服务
+# Test service
 curl http://localhost:8000/health
 ```
 
-### 参数参考
+### Parameter Reference
 
-**train.sh：**
+**train.sh:**
 ```
---dataset ID        数据集 ID (默认: your/xlerobot-clean-table)
---output-dir DIR    输出目录 (默认: ./outputs/smolvla_xlerobot)
---model-path PATH   基座模型路径 (默认: lerobot/smolvla_base)
---rename-map JSON   摄像头键名映射
-```
-
-**server.py：**
-```
---model-path PATH  模型路径或 HF ID (默认: lerobot/smolvla_base)
---port INT         服务端口 (默认: 8000)
---host TEXT        绑定地址 (默认: 0.0.0.0)
---device TEXT      推理设备 (默认: auto)
+--dataset ID        Dataset repo ID (default: your/xlerobot-clean-table)
+--output-dir DIR    Output directory (default: ./outputs/smolvla_xlerobot)
+--model-path PATH   Base model path (default: lerobot/smolvla_base)
+--rename-map JSON   Camera key mapping
 ```
 
-**client.py：**
+**server.py:**
 ```
---server-url URL     SmolVLA 推理服务地址 (默认: http://localhost:8000)
---task TEXT          语言指令 (默认: "clean table")
---control-freq FLOAT 控制频率 Hz (默认: 30)
---smooth-ratio FLOAT 动作平滑系数 (默认: 0.3)
---port1 PATH         左臂总线端口 (默认: /dev/ttyACM0)
---port2 PATH         右臂总线端口 (默认: /dev/ttyACM1)
+--model-path PATH  Model path or HF ID (default: lerobot/smolvla_base)
+--port INT         Server port (default: 8000)
+--host TEXT        Bind address (default: 0.0.0.0)
+--device TEXT      Inference device (default: auto)
+```
+
+**client.py:**
+```
+--server-url URL     SmolVLA server URL (default: http://localhost:8000)
+--task TEXT          Language instruction (default: "clean table")
+--control-freq FLOAT Control frequency Hz (default: 30)
+--smooth-ratio FLOAT Action smoothing ratio (default: 0.3)
+--port1 PATH         Left arm bus port (default: /dev/ttyACM0)
+--port2 PATH         Right arm bus port (default: /dev/ttyACM1)
 ```
