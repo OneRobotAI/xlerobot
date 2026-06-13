@@ -175,9 +175,14 @@ class XLerobot2Wheels(Robot):
 
         self.bus1.connect()
         self.bus2.connect()
-        
-        # Check if calibration file exists and ask user if they want to restore it
-        if self.calibration_fpath.is_file():
+
+        # Check if motors are already calibrated (Homing_Offset already in motor EEPROM).
+        # If so, skip the calibration restore — rewriting Homing_Offset on every connect
+        # can cause the arms to jump to the calibration midpoint when torque is cycled
+        # in configure(). This matches LeRobot's SOFollower behavior.
+        if self.bus1.is_calibrated and self.bus2.is_calibrated:
+            logger.info("Motors already calibrated, skipping calibration restore")
+        elif self.calibration_fpath.is_file():
             logger.info(f"Calibration file found at {self.calibration_fpath}")
             user_input = input(
                 f"Press ENTER to restore calibration from file, or type 'c' and press ENTER to run manual calibration: "
@@ -296,39 +301,46 @@ class XLerobot2Wheels(Robot):
     def configure(self):
         # Set-up arm actuators (position mode)
         # We assume that at connection time, arm is in a rest position,
-        # and torque can be safely disabled to run calibration        
+        # and torque can be safely disabled to run calibration.
+        #
+        # Read current positions and set Goal_Position before cycling torque.
+        # This way, when torque is re-enabled, motors go back to where they
+        # were, not to Goal_Position=0 (the calibration midpoint).
+        
+        current_left = self.bus1.sync_read("Present_Position", self.left_arm_motors)
+        current_right = self.bus2.sync_read("Present_Position", self.right_arm_motors)
+        current_head = self.bus1.sync_read("Present_Position", self.head_motors)
+
+        self.bus1.sync_write("Goal_Position", current_left)
+        self.bus1.sync_write("Goal_Position", current_head)
+        self.bus2.sync_write("Goal_Position", current_right)
+
         self.bus1.disable_torque()
         self.bus2.disable_torque()
-        self.bus2.configure_motors()
+
+        self.bus1.configure_motors()
         self.bus2.configure_motors()
         
         for name in self.left_arm_motors:
             self.bus1.write("Operating_Mode", name, OperatingMode.POSITION.value)
-            # Set P_Coefficient to lower value to avoid shakiness (Default is 32)
             self.bus1.write("P_Coefficient", name, 16)
-            # Set I_Coefficient and D_Coefficient to default value 0 and 32
             self.bus1.write("I_Coefficient", name, 0)
             self.bus1.write("D_Coefficient", name, 43)
         
         for name in self.head_motors:
             self.bus1.write("Operating_Mode", name, OperatingMode.POSITION.value)
-            # Set P_Coefficient to lower value to avoid shakiness (Default is 32)
             self.bus1.write("P_Coefficient", name, 16)
-            # Set I_Coefficient and D_Coefficient to default value 0 and 32
             self.bus1.write("I_Coefficient", name, 0)
             self.bus1.write("D_Coefficient", name, 43)
         
         for name in self.right_arm_motors:
             self.bus2.write("Operating_Mode", name, OperatingMode.POSITION.value)
-            # Set P_Coefficient to lower value to avoid shakiness (Default is 32)
             self.bus2.write("P_Coefficient", name, 16)
-            # Set I_Coefficient and D_Coefficient to default value 0 and 32
             self.bus2.write("I_Coefficient", name, 0)
             self.bus2.write("D_Coefficient", name, 43)
         
         for name in self.base_motors:
             self.bus2.write("Operating_Mode", name, OperatingMode.VELOCITY.value)
-        
         
         self.bus1.enable_torque()
         self.bus2.enable_torque()

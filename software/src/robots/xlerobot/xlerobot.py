@@ -178,9 +178,14 @@ class XLerobot(Robot):
 
         self.bus1.connect()
         self.bus2.connect()
-        
-        # Check if calibration file exists and ask user if they want to restore it
-        if self.calibration_fpath.is_file():
+
+        # Check if motors are already calibrated (Homing_Offset already in motor EEPROM).
+        # If so, skip the calibration restore — rewriting Homing_Offset on every connect
+        # can cause the arms to jump to the calibration midpoint when torque is cycled
+        # in configure(). This matches LeRobot's SOFollower behavior.
+        if self.bus1.is_calibrated and self.bus2.is_calibrated:
+            logger.info("Motors already calibrated, skipping calibration restore")
+        elif self.calibration_fpath.is_file():
             logger.info(f"Calibration file found at {self.calibration_fpath}")
             user_input = input(
                 f"Press ENTER to restore calibration from file, or type 'c' and press ENTER to run manual calibration: "

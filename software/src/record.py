@@ -75,35 +75,37 @@ from lerobot.configs import parser
 from lerobot.configs.policies import PreTrainedConfig
 from lerobot.datasets.image_writer import safe_stop_image_writer
 from lerobot.datasets.lerobot_dataset import LeRobotDataset
-from lerobot.datasets.utils import build_dataset_frame, hw_to_dataset_features
+from lerobot.utils.feature_utils import build_dataset_frame, hw_to_dataset_features
 from lerobot.datasets.video_utils import VideoEncodingManager
 from lerobot.policies.factory import make_policy
 from lerobot.policies.pretrained import PreTrainedPolicy
 from lerobot.robots import (  # noqa: F401
     Robot,
     RobotConfig,
-    bi_so100_follower,
+    bi_so_follower,
     hope_jr,
     koch_follower,
     make_robot_from_config,
-    so100_follower,
-    so101_follower,
+    so_follower,
     xlerobot,
+    xlerobot_2wheels,
 )
 from lerobot.teleoperators import (  # noqa: F401
     Teleoperator,
     TeleoperatorConfig,
-    bi_so100_leader,
+    bi_so_leader,
     homunculus,
     koch_leader,
     make_teleoperator_from_config,
-    so100_leader,
-    so101_leader,
-    xlerobot_vr,
+    so_leader,
 )
 from lerobot.teleoperators.keyboard.teleop_keyboard import KeyboardTeleop
-from lerobot.teleoperators.xlerobot_vr.xlerobot_vr import XLerobotVRTeleop, init_vr_listener
-from lerobot.utils.control_utils import (
+try:
+    from lerobot.teleoperators.xlerobot_vr.xlerobot_vr import XLerobotVRTeleop, init_vr_listener
+except ImportError:
+    XLerobotVRTeleop = None
+    init_vr_listener = None
+from lerobot.common.control_utils import (
     init_keyboard_listener,
     is_headless,
     predict_action,
@@ -112,8 +114,8 @@ from lerobot.utils.control_utils import (
 )
 # from lerobot.utils.robot_utils import busy_wait
 from lerobot.utils.robot_utils import precise_sleep
+from lerobot.utils.device_utils import get_safe_torch_device
 from lerobot.utils.utils import (
-    get_safe_torch_device,
     init_logging,
     log_say,
 )
@@ -193,8 +195,8 @@ def reset_follower_position(robot, target_position, steps=50, delay=0.015, start
             head_motor_dict = {}
         else:
             head_motor_dict = {
-                'head_motor_1.pos': 8.982,
-                'head_motor_2.pos': 28.8703,
+                'head_motor_1.pos': 0,
+                'head_motor_2.pos': 1500,
             }
         base_action_dict = {
             "x.vel": 0,
@@ -323,8 +325,7 @@ def record_loop(
                 if isinstance(
                     t,
                     (
-                        so100_leader.SO100Leader,
-                        so101_leader.SO101Leader,
+                        so_leader.SOLeader,
                         koch_leader.KochLeader,
                     ),
                 )
@@ -350,7 +351,9 @@ def record_loop(
     while timestamp < control_time_s:
         start_loop_t = time.perf_counter()
 
-        current_events = teleop.get_vr_events()
+        current_events = {}
+        if XLerobotVRTeleop is not None and isinstance(teleop, XLerobotVRTeleop):
+            current_events = teleop.get_vr_events()
         events.update(current_events)
 
 
@@ -386,7 +389,28 @@ def record_loop(
             )
             action = {key: action_values[i].item() for i, key in enumerate(robot.action_features)}
         elif policy is None and isinstance(teleop, Teleoperator):
-            action = teleop.get_action(observation, robot)
+            action = teleop.get_action()
+            # BiSOLeader 输出 left_/right_ 前缀，XLerobot 期望 left_arm_/right_arm_
+            mapped = {}
+            for key, value in action.items():
+                if key.startswith("left_"):
+                    mapped[f"left_arm_{key[5:]}"] = value
+                elif key.startswith("right_"):
+                    mapped[f"right_arm_{key[6:]}"] = value
+                else:
+                    mapped[key] = value
+            # XLerobot 还需要头部和底盘动作，BiSOLeader 不提供，补零
+            HEAD_PAN_POS = 0       # 7号舵机（head_motor_1）水平
+            HEAD_TILT_POS = 1500   # 8号舵机（head_motor_2）俯仰中位
+            for feat in robot.action_features:
+                if feat not in mapped:
+                    if feat == "head_motor_1.pos":
+                        mapped[feat] = HEAD_PAN_POS
+                    elif feat == "head_motor_2.pos":
+                        mapped[feat] = HEAD_TILT_POS
+                    else:
+                        mapped[feat] = 0.0
+            action = mapped
         elif policy is None and isinstance(teleop, list):
             # TODO(pepijn, steven): clean the record loop for use of multiple robots (possibly with pipeline)
             arm_action = teleop_arm.get_action()
@@ -411,7 +435,8 @@ def record_loop(
             logging.info("Rest to the zero position of robot")
             log_say("Reset position")
             action = teleop.move_to_zero_position(robot)
-            teleop.vr_event_handler.events['reset_position'] = False
+            if XLerobotVRTeleop is not None and isinstance(teleop, XLerobotVRTeleop):
+                teleop.vr_event_handler.events['reset_position'] = False
             events["reset_position"] = False 
         elif events["back_position"]:
             logging.info("Back to the backet position of robot")
@@ -422,7 +447,8 @@ def record_loop(
                 queue_reset_actions(action_queue, robot, GLOBAL_OPEN_GOAL, steps=10, start_position=GLOBAL_BACK_GOAL)
                 queue_reset_actions(action_queue, robot, np.zeros(12), steps=30, start_position=GLOBAL_OPEN_GOAL)
                 action_queue.append({}) # reset to zero flag
-            teleop.vr_event_handler.events['back_position'] = False
+            if XLerobotVRTeleop is not None and isinstance(teleop, XLerobotVRTeleop):
+                teleop.vr_event_handler.events['back_position'] = False
             events["back_position"] = False  # reset event state
             
         sent_action = robot.send_action(action)
@@ -488,17 +514,22 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
 
     robot.connect()
     if teleop is not None:
-        teleop.connect(robot=robot)
-        teleop.send_feedback()
+        teleop.connect()
+        # teleop.send_feedback({})  # BiSOLeader 未实现此方法
 
     # Select acording teleoperator
-    if isinstance(teleop, XLerobotVRTeleop):
+    if XLerobotVRTeleop is not None and isinstance(teleop, XLerobotVRTeleop):
         # Use VR listener
         listener, events = init_vr_listener(teleop)
         logging.info("🎮 Using VR to control recording status")
     else:
         # Use keyboard listener
         listener, events = init_keyboard_listener()
+        # 初始化 VR 特有的事件键（键盘模式下用不到，设为 False 避免 KeyError）
+        events.setdefault("reset_position", False)
+        events.setdefault("back_position", False)
+        events.setdefault("rerecord_episode", False)
+        events.setdefault("exit_early", False)
         logging.info("⌨️ Using keyboard to control recording status")
 
     with VideoEncodingManager(dataset):
@@ -539,7 +570,8 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
                 log_say("Delete Again record", cfg.play_sounds)
                 events["rerecord_episode"] = False
                 events["exit_early"] = False
-                teleop.vr_event_handler.events['rerecord_episode'] = False
+                if XLerobotVRTeleop is not None and isinstance(teleop, XLerobotVRTeleop):
+                    teleop.vr_event_handler.events['rerecord_episode'] = False
 
                 dataset.clear_episode_buffer()
                 time.sleep(10)
