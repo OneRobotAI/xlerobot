@@ -106,3 +106,15 @@ web_control/server/.venv/
 web_control/server/__pycache__/
 web_control/server/.pytest_cache/
 .claude/
+
+# OpenCode config
+.omo/
+
+# Output directories
+outputs/
+xvla_deploy/outputs/
+smolvla_deploy/outputs/
+
+# Python cache
+__pycache__/
+*.pyc
