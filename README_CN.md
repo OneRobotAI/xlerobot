@@ -15,8 +15,8 @@
 
 | 类别 | 指南 | 内容 |
 |------|------|------|
-| **硬件通用** | [`shared/GUIDE.md`](shared/GUIDE.md) | 环境搭建、机械臂校准、数据采集、数据集上传、通用排错 |
-| **X-VLA** | [`xvla_deploy/GUIDE.md`](xvla_deploy/GUIDE.md) | X-VLA 模型训练、推理服务部署、客户端使用 |
-| **SmolVLA** | [`smolvla_deploy/GUIDE.md`](smolvla_deploy/GUIDE.md) | SmolVLA 模型训练、推理服务部署、客户端使用 |
+| **硬件通用** | [`shared/GUIDE_CN.md`](shared/GUIDE_CN.md) | 环境搭建、机械臂校准、数据采集、数据集上传、通用排错 |
+| **X-VLA** | [`xvla_deploy/GUIDE_CN.md`](xvla_deploy/GUIDE_CN.md) | X-VLA 模型训练、推理服务部署、客户端使用 |
+| **SmolVLA** | [`smolvla_deploy/GUIDE_CN.md`](smolvla_deploy/GUIDE_CN.md) | SmolVLA 模型训练、推理服务部署、客户端使用 |
 
-> 首次使用建议从 `shared/GUIDE.md` 开始，完成硬件准备和数据采集后，再根据你选择的 VLA 模型阅读对应目录的 `GUIDE.md`。
+> 首次使用建议从 `shared/GUIDE_CN.md` 开始，完成硬件准备和数据采集后，再根据你选择的 VLA 模型阅读对应目录的 `GUIDE_CN.md`。
