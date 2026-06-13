@@ -30,7 +30,7 @@
 │  ┌──────────────────────────────────────────────┐   │
 │  │ ① 数据采集                                     │   │
 │  │   双主臂遥操作 → 录制叠衣服演示数据                │   │
-│  │   collect_data.py                              │   │
+ │  │   shared/collect_data.py                        │   │
 │  └──────────┬───────────────────────────────────┘   │
 │             │ 数据集 (LeRobot格式)                    │
 │             ▼                                       │
@@ -125,7 +125,7 @@ pip install lerobot[xvla]
 python -c "from lerobot.policies.xvla.modeling_xvla import XVLAPolicy; print('✅ X-VLA OK')"
 
 # 设置 XLerobot 软链接（client.py 需要导入 XLerobot 类）
-bash /home/zach/XLeRobot/xvla_deploy/setup_local.sh
+bash /home/zach/XLeRobot/shared/setup_local.sh
 ```
 
 ### 4.2 云端 GPU 服务器（训练 + 推理）
@@ -171,6 +171,8 @@ lerobot-calibrate \
 ### 1.2 录制演示数据
 
 ```bash
+cd /home/zach/XLeRobot/shared
+
 python collect_data.py \
   --num-episodes 50 \
   --task "fold the towel on the table" \
@@ -205,7 +207,7 @@ cam_right_wrist:    640×480 RGB 视频
 
 ```bash
 python -c "
-from lerobot.common.datasets.lerobot_dataset import LeRobotDataset
+from lerobot.datasets.lerobot_dataset import LeRobotDataset
 ds = LeRobotDataset('your/xlerobot-cloth-fold')
 print(f'Episode数: {ds.num_episodes}')
 print(f'总帧数: {len(ds)}')
@@ -518,10 +520,11 @@ python server.py --model-path ./my_model --port 8000
 
 | 文件 | 在哪运行 | 用途 |
 |------|---------|------|
-| `collect_data.py` | 本地（连机械臂） | 双主臂遥操作录制演示 |
 | `train.sh` | 云端（有 GPU） | X-VLA 微调训练 |
-| `server.py` | 云端（有 GPU） | FastAPI 推理服务 |
+| `server.py` | 云端（有 GPU） | X-VLA FastAPI 推理服务 |
 | `client.py` | 本地（连机械臂） | 连接云端，控制机器人 |
 | `deploy.sh` | 云端（有 GPU） | 一键安装 + 启动服务 |
 | `requirements.txt` | 两边 | Python 依赖列表 |
 | `README.md` | — | 本教程
+
+> **共享硬件工具**（位于 `shared/`）：`calibrate_xlerobot.py`、`collect_data.py`、`read_init_pose.py` 与模型无关，`xvla_deploy/` 和 `smolvla_deploy/` 共用。

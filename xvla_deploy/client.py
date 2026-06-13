@@ -21,13 +21,23 @@ import time
 import traceback
 from pathlib import Path
 
+import cv2
 import numpy as np
 import requests
 
-# XLeRobot imports
-from lerobot.robots.xlerobot import XLerobotConfig, XLerobot
+# XLeRobot imports — 自动检测硬件版本
+try:
+    from lerobot.robots.xlerobot_2wheels import XLerobot2WheelsConfig as RobotConfig
+    from lerobot.robots.xlerobot_2wheels import XLerobot2Wheels as RobotClass
+    ROBOT_VERSION = "2wheels"
+    print(f"🔧 检测到 XLeRobot 2 轮差速版")
+except ImportError:
+    from lerobot.robots.xlerobot import XLerobotConfig as RobotConfig
+    from lerobot.robots.xlerobot import XLerobot as RobotClass
+    ROBOT_VERSION = "3wheels"
+    print(f"🔧 检测到 XLeRobot 3 轮全向版")
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s", force=True)
 logger = logging.getLogger("xvla_client")
 
 # ============================================================
@@ -71,6 +81,28 @@ RIGHT_ARM_JOINTS = [
 
 ALL_ARM_JOINTS = LEFT_ARM_JOINTS + RIGHT_ARM_JOINTS  # 12 joints total
 
+# 数据集初始手臂位置（从训练数据第一帧的 observation.state 提取）
+# 推理前先平滑移动到该位置，避免一启动就乱跳
+INITIAL_ARM_POS = {
+    "left_arm_shoulder_pan.pos": -4.0,
+    "left_arm_shoulder_lift.pos": -99.6,
+    "left_arm_elbow_flex.pos": 93.6,
+    "left_arm_wrist_flex.pos": 67.2,
+    "left_arm_wrist_roll.pos": 2.8,
+    "left_arm_gripper.pos": 1.0,
+    "right_arm_shoulder_pan.pos": 3.7,
+    "right_arm_shoulder_lift.pos": -85.3,
+    "right_arm_elbow_flex.pos": 92.8,
+    "right_arm_wrist_flex.pos": 52.2,
+    "right_arm_wrist_roll.pos": -1.9,
+    "right_arm_gripper.pos": 2.2,
+}
+
+# 默认动作平滑系数
+# 太小（0.02）会导致动作几乎不可见
+# 建议值: 0.3（快速响应）, 0.5（激进）, 0.1（保守）
+DEFAULT_SMOOTH_RATIO = 0.3
+
 # ============================================================
 # XLeRobot Client
 # ============================================================
@@ -86,6 +118,7 @@ class XVLAXLeRobotClient:
         domain_id: int = 0,
         denoise_steps: int = 10,
         control_freq: float = 30.0,
+        smooth_ratio: float = DEFAULT_SMOOTH_RATIO,
         camera_keys: list[str] | None = None,
     ):
         self.server_url = server_url.rstrip("/") + "/act"
@@ -93,19 +126,20 @@ class XVLAXLeRobotClient:
         self.domain_id = domain_id
         self.denoise_steps = denoise_steps
         self.control_freq = control_freq
+        self.smooth_ratio = smooth_ratio
         self.camera_keys = camera_keys or ["cam_top", "cam_left_wrist", "cam_right_wrist"]
 
-        self.robot: XLerobot | None = None
+        self.robot: RobotClass | None = None
 
     # ----- robot connection -----
 
-    def connect_robot(self, robot_config: XLerobotConfig | None = None):
+    def connect_robot(self, robot_config: RobotConfig | None = None):
         """Initialize and connect to XLeRobot hardware."""
         if robot_config is None:
-            robot_config = XLerobotConfig()
+            robot_config = RobotConfig()
 
         logger.info(f"Connecting XLeRobot (port1={robot_config.port1}, port2={robot_config.port2})...")
-        self.robot = XLerobot(robot_config)
+        self.robot = RobotClass(robot_config)
         self.robot.connect()
         logger.info("✅ XLeRobot connected")
 
@@ -144,15 +178,16 @@ class XVLAXLeRobotClient:
         The action array is ordered as:
           [left_arm(6), right_arm(6)]
         Maps to XLeRobot's observation.action_features format.
+        Model outputs 16D: [arm(12) + head_motor_1 + head_motor_2 + x.vel + theta.vel]
         """
         robot_action = {}
         for i, joint in enumerate(ALL_ARM_JOINTS):
             robot_action[f"{joint}.pos"] = float(action_12d[i])
-        # Keep head and base still during cloth folding
+        # 头部位置：与采集数据时的初始位置一致
         robot_action["head_motor_1.pos"] = 0.0
-        robot_action["head_motor_2.pos"] = 0.0
+        robot_action["head_motor_2.pos"] = 1500.0
+        # 底盘不动（2轮差速版无 y.vel）
         robot_action["x.vel"] = 0.0
-        robot_action["y.vel"] = 0.0
         robot_action["theta.vel"] = 0.0
         return robot_action
 
@@ -194,6 +229,29 @@ class XVLAXLeRobotClient:
 
     # ----- main control loop -----
 
+    def _move_to_initial_position(self, duration: float = 3.0):
+        """平滑移动到训练数据集的初始位置，避免一启动就乱跳。"""
+        logger.info(f"平滑移动到初始位置（{duration}秒）...")
+        obs = self.robot.get_observation()
+        current = {k: obs.get(k, 0.0) for k in INITIAL_ARM_POS}
+
+        freq = 30
+        steps = int(duration * freq)
+        for s in range(steps + 1):
+            t = s / steps  # 0→1
+            action = {}
+            for key, target in INITIAL_ARM_POS.items():
+                cur = current.get(key, 0.0)
+                action[key] = cur + (target - cur) * t
+            action["head_motor_1.pos"] = 0.0
+            action["head_motor_2.pos"] = 1500.0
+            action["x.vel"] = 0.0
+            action["y.vel"] = 0.0
+            action["theta.vel"] = 0.0
+            self.robot.send_action(action)
+            time.sleep(1.0 / freq)
+        logger.info("✅ 已到达初始位置")
+
     def run(self, num_steps: int = -1):
         """Run the inference control loop.
         
@@ -203,14 +261,21 @@ class XVLAXLeRobotClient:
         if self.robot is None:
             raise RuntimeError("Robot not connected. Call connect_robot() first.")
 
+        print(f"[XVLA] 启动控制循环 (freq={self.control_freq}Hz, smooth={self.smooth_ratio})")
+        print(f"[XVLA] Server: {self.server_url}")
+        print(f"[XVLA] Task: '{self.task_instruction}'")
+        print("[XVLA] Press Ctrl+C to stop")
         logger.info(f"Starting control loop (freq={self.control_freq}Hz)")
-        logger.info(f"Server: {self.server_url}")
-        logger.info(f"Task: '{self.task_instruction}'")
-        logger.info("Press Ctrl+C to stop")
+
+        # 平滑移动到训练初始位置，使模型观测与训练分布匹配
+        self._move_to_initial_position()
 
         step = 0
         last_action_chunk = None
         chunk_index = 0
+        # 动作平滑：用当前关节位置初始化
+        obs = self.robot.get_observation()
+        prev_action_12d = self._build_proprio(obs)
 
         try:
             while num_steps < 0 or step < num_steps:
@@ -218,6 +283,22 @@ class XVLAXLeRobotClient:
 
                 # 1. Get observation from robot
                 obs = self.robot.get_observation()
+
+                # 1b. 显示摄像头画面（转 BGR 以适配 OpenCV 显示）
+                for cam_key in self.camera_keys:
+                    if cam_key in obs and obs[cam_key] is not None:
+                        img = np.asarray(obs[cam_key])
+                        if img.dtype != np.uint8:
+                            img = (img * 255).clip(0, 255).astype(np.uint8)
+                        # 缩放显示宽度不超过 320
+                        h, w = img.shape[:2]
+                        if w > 320:
+                            scale = 320.0 / w
+                            img = cv2.resize(img, None, fx=scale, fy=scale)
+                        cv2.imshow(cam_key, cv2.cvtColor(img, cv2.COLOR_RGB2BGR))
+                if cv2.waitKey(1) & 0xFF == ord('q'):
+                    print("[XVLA] 🛑 按 Q 退出")
+                    break
 
                 # 2. Extract proprioception and images
                 proprio = self._build_proprio(obs)
@@ -232,15 +313,33 @@ class XVLAXLeRobotClient:
                     if last_action_chunk is None:
                         # Server unavailable — stop safely
                         logger.error("Server unavailable, stopping")
+                        print("[XVLA] ❌ 服务器无响应，停止")
                         break
 
-                    logger.info(f"  Received chunk of {len(last_action_chunk)} actions")
                     chunk_len = len(last_action_chunk)
+                    print(f"[XVLA] ✅ 收到动作块: {chunk_len} 步, 形状 {last_action_chunk.shape}")
+                    logger.info(f"  Received chunk of {chunk_len} actions")
 
                 # 4. Execute the next action from the chunk
                 if chunk_index < len(last_action_chunk):
-                    action_12d = last_action_chunk[chunk_index]
-                    robot_action = self._build_robot_action(action_12d[:12])
+                    action_full = last_action_chunk[chunk_index]  # shape (16,)
+                    action_arm = action_full[:12]  # 手臂 12 维
+
+                    # 动作平滑：当前关节位置与模型预测的混合
+                    delta = np.zeros(12, dtype=np.float32)
+                    if prev_action_12d is not None:
+                        delta = action_arm - prev_action_12d
+                        action_arm = prev_action_12d + delta * self.smooth_ratio
+                    prev_action_12d = action_arm.copy()
+
+                    # 打印动作值（每 30 帧约每秒一次）
+                    if step % 30 == 0:
+                        max_delta = float(np.max(np.abs(delta)))
+                        print(f"  [动作] 模型输出关节0={action_full[0]:+.1f} "
+                              f"发送={action_arm[0]:+.1f} 最大差值={max_delta:.1f} "
+                              f"平滑={self.smooth_ratio}")
+
+                    robot_action = self._build_robot_action(action_arm)
                     self.robot.send_action(robot_action)
                     chunk_index += 1
 
@@ -263,6 +362,7 @@ class XVLAXLeRobotClient:
             logger.error(f"❌ Error in control loop: {e}")
             traceback.print_exc()
         finally:
+            cv2.destroyAllWindows()
             self.disconnect_robot()
             logger.info("Client stopped")
 
@@ -283,6 +383,9 @@ def parse_args():
                         help="X-VLA denoising steps (default: 10)")
     parser.add_argument("--control-freq", type=float, default=30.0,
                         help="Control frequency in Hz (default: 30)")
+    parser.add_argument("--smooth-ratio", type=float, default=DEFAULT_SMOOTH_RATIO,
+                        help=f"Action smoothing ratio (default: {DEFAULT_SMOOTH_RATIO}). "
+                             f"0.02=very smooth/slow, 0.3=responsive, 1.0=no smoothing")
     parser.add_argument("--port1", default="/dev/ttyACM0",
                         help="Left arm + head bus port (default: /dev/ttyACM0)")
     parser.add_argument("--port2", default="/dev/ttyACM1",
@@ -295,23 +398,40 @@ def main():
 
     # Build robot config (cameras can be customized here)
     from lerobot.cameras.opencv.configuration_opencv import OpenCVCameraConfig
-    from lerobot.cameras.configs import Cv2Rotation
+    from lerobot.cameras.configs import Cv2Rotation, Cv2Backends
 
-    robot_config = XLerobotConfig(
+    robot_config = RobotConfig(
         port1=args.port1,
         port2=args.port2,
         cameras={
             "cam_top": OpenCVCameraConfig(
-                index_or_path="/dev/video0", fps=30, width=640, height=480,
+                index_or_path="/dev/video0", fps=30, width=640, height=480, fourcc="MJPG", backend=Cv2Backends.V4L2,
             ),
             "cam_left_wrist": OpenCVCameraConfig(
-                index_or_path="/dev/video2", fps=30, width=640, height=480,
+                index_or_path="/dev/video2", fps=30, width=640, height=480, fourcc="MJPG", backend=Cv2Backends.V4L2,
             ),
             "cam_right_wrist": OpenCVCameraConfig(
-                index_or_path="/dev/video4", fps=30, width=640, height=480,
+                index_or_path="/dev/video4", fps=30, width=640, height=480, fourcc="MJPG", backend=Cv2Backends.V4L2,
             ),
         },
     )
+
+    # 固定摄像头参数，确保每次启动画面一致
+    import subprocess
+    for cam_dev in ["/dev/video0", "/dev/video2", "/dev/video4"]:
+        try:
+            subprocess.run(
+                ["v4l2-ctl", "-d", cam_dev,
+                 "--set-ctrl", "white_balance_automatic=0",
+                 "--set-ctrl", "white_balance_temperature=4600",
+                 "--set-ctrl", "auto_exposure=3",
+                 "--set-ctrl", "saturation=56",
+                 "--set-ctrl", "brightness=0",
+                 "--set-ctrl", "contrast=3"],
+                capture_output=True, timeout=5
+            )
+        except Exception:
+            pass  # 部分摄像头不支持，忽略
 
     client = XVLAXLeRobotClient(
         server_url=args.server_url,
@@ -319,6 +439,7 @@ def main():
         domain_id=args.domain_id,
         denoise_steps=args.denoise_steps,
         control_freq=args.control_freq,
+        smooth_ratio=args.smooth_ratio,
     )
 
     try:
