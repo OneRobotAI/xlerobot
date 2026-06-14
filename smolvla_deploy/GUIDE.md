@@ -278,6 +278,29 @@ kill %1              # Stop server
 
 > Cloud platform port exposure varies. Refer to your platform's documentation (AutoDL custom service, Featurize port mapping, etc.).
 
+### 3.5 Troubleshooting
+
+#### Camera image is too bright or has color cast
+
+The client applies v4l2-ctl camera settings at startup. If colors look wrong, try different settings in `client.py`:
+
+```python
+# auto_exposure=3 (auto) vs 1 (manual)
+# contrast, saturation, brightness — adjust as needed
+```
+
+#### Server error: "size of tensor a (12) must match size of tensor b (16)"
+
+The client was sending only 12 arm joints. The model expects the full 16-DOF state
+(12 arms + 2 head + 2 base). Update `_build_proprio()` in `client.py` to include
+all 16 dimensions.
+
+#### Server error: "expected input to have 3 channels, but got 480 channels"
+
+Images must be in (C, H, W) format, not (H, W, C). The server now handles this
+conversion automatically. If implementing a custom client, ensure images are
+converted with `.permute(2, 0, 1)` and scaled to float32 [0, 1].
+
 ---
 
 ## Appendix A: Common Errors

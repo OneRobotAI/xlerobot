@@ -282,6 +282,25 @@ kill %1              # 停止服务
 
 ---
 
+## 附录：常见问题排查
+
+### 摄像头画面过亮或偏色
+
+客户端启动时会用 v4l2-ctl 设置摄像头参数。如果颜色异常，修改 `client.py` 中的配置：
+
+```python
+# auto_exposure=3（自动）或 1（手动）
+# contrast、saturation、brightness——按需调节
+```
+
+### 服务端报错 "size of tensor a (12) must match size of tensor b (16)"
+
+客户端只发送了 12 维手臂关节，模型需要完整的 16 维状态（12 手臂 + 2 头部 + 2 底盘）。确保 `_build_proprio()` 方法包含全部 16 个维度。
+
+### 服务端报错 "expected input to have 3 channels, but got 480 channels"
+
+图像必须是 (C, H, W) 格式，不能是 (H, W, C)。服务端已自动处理此转换。如果自己实现客户端，记得用 `.permute(2, 0, 1)` 转换通道顺序，并缩放到 float32 [0, 1]。
+
 ## 附录A：常见错误
 
 ### 训练时报错
