@@ -174,7 +174,7 @@ export LEROBOT_CACHE=/data/datasets
 bash train.sh \
   --dataset zonglin11/xlerobot_fold_cloth \
   --model-path shared/patched_models/xvla-folding-state16 \
-  --steps 15000 \
+  --steps 30000 \
   --output-dir ./outputs/xvla_xlerobot_fold_vision \
   --rename-map '{"observation.images.top": "observation.images.image",
                  "observation.images.left_wrist": "observation.images.image2",
@@ -188,7 +188,7 @@ bash /home/zach/XLeRobot/shared/patch_state_dim.sh
 bash train.sh \
   --dataset zonglin11/xlerobot_fold_cloth \
   --model-path shared/patched_models/xvla-folding-state16 \
-  --steps 15000 \
+  --steps 30000 \
   --output-dir ./outputs/xvla_xlerobot_fold_vision \
   --repo-id zonglin11/xvla-xlerobot-fold-vision \
   --rename-map '{"observation.images.top": "observation.images.image",
@@ -203,7 +203,7 @@ bash /home/zach/XLeRobot/shared/patch_state_dim.sh --model lerobot/xvla-base
 bash train.sh \
   --dataset zonglin11/xlerobot_clean_table \
   --model-path shared/patched_models/xvla-base-state16 \
-  --steps 15000 \
+  --steps 30000 \
   --output-dir ./outputs/xvla_xlerobot_vision_unfrozen \
   --rename-map '{"observation.images.top": "observation.images.image",
                  "observation.images.left_wrist": "observation.images.image2",
