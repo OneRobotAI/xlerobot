@@ -118,7 +118,7 @@ SmolVLA expects camera keys `camera1`, `camera2`, `camera3`. Use `--rename-map`:
                "observation.images.right_wrist": "observation.images.camera3"}'
 ```
 
-#### Training Example
+#### Training Example (XLeRobot 16-DOF)
 
 ```bash
 cd ~/smolvla_deploy
@@ -143,6 +143,22 @@ lerobot-train \
   --batch_size=64 \
   --steps=20000 \
   --rename_map='{"observation.images.top": "observation.images.camera1",
+                 "observation.images.left_wrist": "observation.images.camera2",
+                 "observation.images.right_wrist": "observation.images.camera3"}'
+```
+
+#### Training Example (Bimanual 12-DOF)
+
+For bimanual setups using `bi_so_follower` (12-DOF arms only), use the corresponding camera rename map:
+
+```bash
+cd ~/smolvla_deploy
+conda activate lerobot
+export LEROBOT_CACHE=/data/datasets
+
+bash train.sh \
+  --dataset your/bimanual-dataset \
+  --rename-map '{"observation.images.left_top": "observation.images.camera1",
                  "observation.images.left_wrist": "observation.images.camera2",
                  "observation.images.right_wrist": "observation.images.camera3"}'
 ```
@@ -228,6 +244,23 @@ python client.py \
 --port1 PATH         Left arm bus port (default: /dev/ttyACM0)
 --port2 PATH         Right arm bus port (default: /dev/ttyACM1)
 ```
+
+#### Bimanual Inference (12-DOF Arms Only)
+
+If you trained a model on bimanual data (bi_so_follower, 12-DOF arms without head/base), use the same server but with a bimanual client. The camera configuration differs — each arm has its own camera:
+
+```bash
+cd /home/zach/XLeRobot
+conda activate lerobot
+export PYTHONPATH=/home/zach/XLeRobot/software/src:$PYTHONPATH
+
+python xvla_deploy/client_bimanual.py \
+  --server-url http://localhost:8000 \
+  --task "fold the towel"
+```
+
+> Note: `client_bimanual.py` is shared between X-VLA and SmolVLA since the HTTP API is identical.
+> Camera keys for bimanual: `left_top`, `left_wrist`, `right_wrist` (with `left_`/`right_` prefix from bi_so_follower).
 
 ### 3.2 Remote Inference
 
