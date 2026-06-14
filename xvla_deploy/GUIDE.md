@@ -154,6 +154,13 @@ XLeRobot dataset camera keys differ from what X-VLA expects. Use `--rename-map`:
 
 **Cloth folding (unfrozen vision encoder, no Hub upload):**
 
+First, patch the base model's state dimension:
+```bash
+bash /home/zach/XLeRobot/shared/patch_state_dim.sh
+# Output: shared/patched_models/xvla-folding-state16/
+```
+
+Then train:
 ```bash
 cd ~/xvla_deploy
 conda activate lerobot
@@ -161,7 +168,7 @@ export LEROBOT_CACHE=/data/datasets
 
 bash train.sh \
   --dataset zonglin11/xlerobot_fold_cloth \
-  --model-path lerobot/xvla-folding \
+  --model-path shared/patched_models/xvla-folding-state16 \
   --steps 15000 \
   --output-dir ./outputs/xvla_xlerobot_fold_vision \
   --rename-map '{"observation.images.top": "observation.images.image",
@@ -172,9 +179,10 @@ bash train.sh \
 **Cloth folding (upload to HF Hub):**
 
 ```bash
+bash /home/zach/XLeRobot/shared/patch_state_dim.sh
 bash train.sh \
   --dataset zonglin11/xlerobot_fold_cloth \
-  --model-path lerobot/xvla-folding \
+  --model-path shared/patched_models/xvla-folding-state16 \
   --steps 15000 \
   --output-dir ./outputs/xvla_xlerobot_fold_vision \
   --repo-id zonglin11/xvla-xlerobot-fold-vision \
@@ -186,9 +194,10 @@ bash train.sh \
 **Clean table (from xvla-base, no upload):**
 
 ```bash
+bash /home/zach/XLeRobot/shared/patch_state_dim.sh --model lerobot/xvla-base
 bash train.sh \
   --dataset zonglin11/xlerobot_clean_table \
-  --model-path lerobot/xvla-base \
+  --model-path shared/patched_models/xvla-base-state16 \
   --steps 15000 \
   --output-dir ./outputs/xvla_xlerobot_vision_unfrozen \
   --rename-map '{"observation.images.top": "observation.images.image",
@@ -199,9 +208,10 @@ bash train.sh \
 **Clean table (upload to HF Hub):**
 
 ```bash
+bash /home/zach/XLeRobot/shared/patch_state_dim.sh --model lerobot/xvla-base
 bash train.sh \
   --dataset zonglin11/xlerobot_clean_table \
-  --model-path lerobot/xvla-base \
+  --model-path shared/patched_models/xvla-base-state16 \
   --steps 30000 \
   --output-dir ./outputs/xvla_xlerobot_v2 \
   --repo-id zonglin11/xvla-xlerobot-clean-table-v2 \
@@ -568,8 +578,10 @@ X-VLA internally uses a 20-dim action space (auto-adapted via `action_mode=auto`
 ### Training
 
 ```bash
-# Light training (default)
-bash train.sh --dataset your/dataset --model-path lerobot/xvla-folding
+# First patch the base model, then train:
+#   bash patch_state_dim.sh  →  shared/patched_models/xvla-folding-state16/
+
+bash train.sh --dataset your/dataset --model-path shared/patched_models/xvla-folding-state16
 
 # Custom steps and output dir
 bash train.sh --dataset your/dataset --steps 15000 --output-dir ./outputs/xxx
