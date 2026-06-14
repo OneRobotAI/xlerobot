@@ -259,12 +259,12 @@ cd /home/zach/XLeRobot
 conda activate lerobot
 export PYTHONPATH=/home/zach/XLeRobot/software/src:$PYTHONPATH
 
-python shared/client_bimanual.py \
+python xvla_deploy/client_bimanual.py \
   --server-url http://localhost:8000 \
   --task "fold the towel"
 ```
 
-> Note: `client_bimanual.py` is shared between X-VLA and SmolVLA since the HTTP API is identical.
+> Note: `client_bimanual.py` lives in `xvla_deploy/` but its HTTP API is compatible with SmolVLA servers — no model-specific code.
 > Camera keys for bimanual: `left_top`, `left_wrist`, `right_wrist` (with `left_`/`right_` prefix from bi_so_follower).
 
 ### 3.2 Remote Inference
