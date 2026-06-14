@@ -126,7 +126,10 @@ conda activate lerobot
 export LEROBOT_CACHE=/data/datasets
 
 bash train.sh \
-  --dataset your/xlerobot-clean-table \
+  --dataset zonglin11/xlerobot_fold_towel \
+  --output-dir ./outputs/smolvla_xlerobot_fold_towel \
+  --batch-size 16 \
+  --repo-id zonglin11/smolvla-xlerobot-fold-towel \
   --rename-map '{"observation.images.top": "observation.images.camera1",
                  "observation.images.left_wrist": "observation.images.camera2",
                  "observation.images.right_wrist": "observation.images.camera3"}'
@@ -137,11 +140,13 @@ This executes:
 ```bash
 lerobot-train \
   --policy.path=lerobot/smolvla_base \
-  --dataset.repo_id=your/xlerobot-clean-table \
-  --output_dir=./outputs/smolvla_xlerobot \
+  --dataset.repo_id=zonglin11/xlerobot_fold_towel \
+  --output_dir=./outputs/smolvla_xlerobot_fold_towel \
   --policy.device=cuda \
-  --batch_size=64 \
+  --batch_size=16 \
   --steps=20000 \
+  --policy.push_to_hub=true \
+  --policy.repo_id=zonglin11/smolvla-xlerobot-fold-towel \
   --rename_map='{"observation.images.top": "observation.images.camera1",
                  "observation.images.left_wrist": "observation.images.camera2",
                  "observation.images.right_wrist": "observation.images.camera3"}'
