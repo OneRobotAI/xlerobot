@@ -20,3 +20,11 @@ This repository contains operation manuals for multiple VLA models:
 | **SmolVLA** | [`smolvla_deploy/GUIDE.md`](smolvla_deploy/GUIDE.md) | SmolVLA training, inference server deployment, client usage |
 
 > First-time users: Start with `shared/GUIDE.md` for hardware setup and data collection, then choose the appropriate VLA guide based on your model.
+
+---
+
+## 🎥 Demo
+
+<video src="https://github.com/OneRobotAI/xlerobot/raw/main/docs/en/source/fold_tower.mp4" controls width="100%" style="max-width: 800px;"></video>
+
+*XLeRobot folding a towel using X-VLA*

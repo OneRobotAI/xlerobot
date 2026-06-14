@@ -20,3 +20,11 @@
 | **SmolVLA** | [`smolvla_deploy/GUIDE_CN.md`](smolvla_deploy/GUIDE_CN.md) | SmolVLA 模型训练、推理服务部署、客户端使用 |
 
 > 首次使用建议从 `shared/GUIDE_CN.md` 开始，完成硬件准备和数据采集后，再根据你选择的 VLA 模型阅读对应目录的 `GUIDE_CN.md`。
+
+---
+
+## 🎥 演示效果
+
+<video src="https://github.com/OneRobotAI/xlerobot/raw/main/docs/en/source/fold_tower.mp4" controls width="100%" style="max-width: 800px;"></video>
+
+*XLeRobot 使用 X-VLA 叠毛巾*
