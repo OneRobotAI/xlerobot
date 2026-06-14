@@ -259,7 +259,7 @@ cd /home/zach/XLeRobot
 conda activate lerobot
 export PYTHONPATH=/home/zach/XLeRobot/software/src:$PYTHONPATH
 
-python xvla_deploy/client_bimanual.py \
+python shared/client_bimanual.py \
   --server-url http://localhost:8000 \
   --task "fold the towel"
 ```

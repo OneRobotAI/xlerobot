@@ -397,7 +397,7 @@ python server.py \
 cd /home/zach/XLeRobot
 conda activate lerobot
 export PYTHONPATH=/home/zach/XLeRobot/software/src:$PYTHONPATH
-python xvla_deploy/client_bimanual.py \
+python shared/client_bimanual.py \
   --server-url http://localhost:8000 \
   --task "fold the towel on the table"
 ```
@@ -438,7 +438,7 @@ ssh -N -f -L 8000:localhost:8000 featurize@<ip> -p <port>
 cd /home/zach/XLeRobot
 conda activate lerobot
 export PYTHONPATH=/home/zach/XLeRobot/software/src:$PYTHONPATH
-python xvla_deploy/client_bimanual.py \
+python shared/client_bimanual.py \
   --server-url http://localhost:8000 \
   --task "fold the towel on the table"
 ```

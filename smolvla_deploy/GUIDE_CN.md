@@ -254,14 +254,14 @@ python client.py \
 
 #### 双臂推理（12-DOF，仅手臂）
 
-如果模型是用双臂数据（bi_so_follower）训练的，推理时复用 `xvla_deploy/client_bimanual.py`：
+如果模型是用双臂数据（bi_so_follower）训练的，推理时用 `shared/client_bimanual.py`：
 
 ```bash
 cd /home/zach/XLeRobot
 conda activate lerobot
 export PYTHONPATH=/home/zach/XLeRobot/software/src:$PYTHONPATH
 
-python xvla_deploy/client_bimanual.py \
+python shared/client_bimanual.py \
   --server-url http://localhost:8000 \
   --task "fold the towel"
 ```
