@@ -25,8 +25,6 @@ This repository contains operation manuals for multiple VLA models:
 
 ## 🎥 Demo
 
-<video src="docs/en/source/fold_tower.mp4" controls width="100%" style="max-width: 800px;" poster="docs/en/source/fold_tower_preview.png">
-  <a href="docs/en/source/fold_tower.mp4">Download video</a>
-</video>
+[![Fold Tower Demo](docs/en/source/fold_tower_preview.png)](docs/en/source/fold_tower.mp4)
 
 *XLeRobot folding a towel using SmolVLA*

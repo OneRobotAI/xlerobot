@@ -25,8 +25,6 @@
 
 ## 🎥 演示效果
 
-<video src="docs/en/source/fold_tower.mp4" controls width="100%" style="max-width: 800px;" poster="docs/en/source/fold_tower_preview.png">
-  <a href="docs/en/source/fold_tower.mp4">下载视频</a>
-</video>
+[![叠毛巾演示](docs/en/source/fold_tower_preview.png)](docs/en/source/fold_tower.mp4)
 
 *XLeRobot 使用 SmolVLA 叠毛巾*
