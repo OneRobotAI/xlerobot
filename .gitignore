@@ -118,3 +118,4 @@ smolvla_deploy/outputs/
 # Python cache
 __pycache__/
 *.pyc
+patched_models/

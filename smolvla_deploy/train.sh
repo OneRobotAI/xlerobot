@@ -22,6 +22,8 @@ set -euo pipefail
 DATASET_REPO_ID="your/xlerobot-clean-table"
 OUTPUT_DIR="./outputs/smolvla_xlerobot"
 MODEL_PATH="lerobot/smolvla_base"     # Start from pretrained base (450M)
+BATCH_SIZE=32                          # Reduce if OOM
+REPO_ID=""                             # HF repo to push the model (empty = don't push)
 
 # Camera key mapping: XLeRobot dataset keys -> SmolVLA model keys
 # XLeRobot:  top, left_wrist, right_wrist
@@ -34,6 +36,8 @@ while [[ $# -gt 0 ]]; do
         --dataset) DATASET_REPO_ID="$2"; shift 2 ;;
         --output-dir) OUTPUT_DIR="$2"; shift 2 ;;
         --model-path) MODEL_PATH="$2"; shift 2 ;;
+        --batch-size) BATCH_SIZE="$2"; shift 2 ;;
+        --repo-id) REPO_ID="$2"; shift 2 ;;
         --rename-map) RENAME_MAP="$2"; shift 2 ;;
         --help)
             echo "Usage: bash train.sh [options]"
@@ -55,11 +59,14 @@ ARGS+=" --policy.path=${MODEL_PATH}"
 ARGS+=" --dataset.repo_id=${DATASET_REPO_ID}"
 ARGS+=" --output_dir=${OUTPUT_DIR}"
 ARGS+=" --policy.device=cuda"
-ARGS+=" --batch_size=64"
+ARGS+=" --batch_size=${BATCH_SIZE}"
 ARGS+=" --steps=20000"
-
-# Camera rename map (maps XLeRobot camera keys to SmolVLA's camera1/camera2/camera3)
-ARGS+=" --rename_map='${RENAME_MAP}'"
+if [ -n "$REPO_ID" ]; then
+    ARGS+=" --policy.push_to_hub=true"
+    ARGS+=" --policy.repo_id=${REPO_ID}"
+else
+    ARGS+=" --policy.push_to_hub=false"
+fi
 
 # ----- Print config -----
 echo ""
@@ -86,7 +93,7 @@ if ! command -v lerobot-train &> /dev/null; then
     exit 1
 fi
 
-lerobot-train ${ARGS}
+lerobot-train ${ARGS} --rename_map "${RENAME_MAP}"
 
 echo ""
 echo "============================================"

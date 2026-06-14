@@ -86,7 +86,9 @@ class SmolVLAModelServer:
         device = torch.device(self.device)
 
         # Load policy (always float32 for inference stability)
-        self.policy = SmolVLAPolicy.from_pretrained(self.model_path)
+        # Convert to absolute path to avoid HF Hub repo ID validation issues
+        model_path = Path(self.model_path).resolve()
+        self.policy = SmolVLAPolicy.from_pretrained(str(model_path))
         self.policy = self.policy.to(device).eval()
         self.policy_config = self.policy.config
 
@@ -159,11 +161,13 @@ class SmolVLAModelServer:
         # Add images using model's expected key names
         for idx, key in enumerate(self.image_keys):
             if idx < len(images):
-                frame[key] = torch.from_numpy(images[idx].astype(np.uint8))
+                # Convert uint8 to float32 in [0,1], then to (C, H, W) for SmolVLA
+                img = torch.from_numpy(images[idx].astype(np.float32) / 255.0)
+                frame[key] = img.permute(2, 0, 1)  # (H, W, C) → (C, H, W)
             else:
                 # Fill missing cameras with zeros
                 c, h, w = self.image_shapes.get(key, (3, 256, 256))
-                frame[key] = torch.zeros((h, w, 3), dtype=torch.uint8)
+                frame[key] = torch.zeros((c, h, w), dtype=torch.float32)
 
         # Add language instruction as raw string (preprocessor handles tokenization)
         frame["task"] = instruction

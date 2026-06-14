@@ -150,10 +150,19 @@ class SmolVLAXLeRobotClient:
     # ----- observation extraction -----
 
     def _build_proprio(self, obs: dict) -> np.ndarray:
-        """Extract joint position vector from observation dict."""
-        proprio = np.zeros(len(ALL_ARM_JOINTS), dtype=np.float32)
+        """Extract full state vector (16-DOF: 12 arms + 2 head + 2 base)."""
+        proprio = np.zeros(ROBOT_DOF, dtype=np.float32)
         for i, joint in enumerate(ALL_ARM_JOINTS):
             proprio[i] = obs.get(f"{joint}.pos", 0.0)
+        # Head motors
+        if len(proprio) > 12:
+            proprio[12] = obs.get("head_motor_1.pos", 0.0)
+            proprio[13] = obs.get("head_motor_2.pos", 1500.0)
+        # Base velocities
+        if len(proprio) > 14:
+            proprio[14] = obs.get("x.vel", 0.0)
+            if len(proprio) > 15:
+                proprio[15] = obs.get("theta.vel", 0.0)
         return proprio
 
     def _build_images(self, obs: dict) -> dict[str, np.ndarray]:
@@ -428,16 +437,17 @@ def main():
         },
     )
 
-    # Fix camera parameters for consistent appearance
+    # Fix camera parameters for consistent appearance (comment out if colors look wrong)
     import subprocess
     for cam_dev in ["/dev/video0", "/dev/video2", "/dev/video4"]:
         try:
             subprocess.run(
                 ["v4l2-ctl", "-d", cam_dev,
-                 "--set-ctrl", "white_balance_automatic=0",
-                 "--set-ctrl", "white_balance_temperature=4600",
                  "--set-ctrl", "auto_exposure=3",
-                 "--set-ctrl", "saturation=56"],
+                 "--set-ctrl", "white_balance_automatic=1",
+                 "--set-ctrl", "brightness=0",
+                 "--set-ctrl", "contrast=5",
+                 "--set-ctrl", "saturation=64"],
                 capture_output=True, timeout=5,
             )
         except Exception:
