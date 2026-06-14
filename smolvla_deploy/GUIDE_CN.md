@@ -291,10 +291,16 @@ python server.py --model-path ~/smolvla_deploy/my_model --port 8000
 # SSH 隧道
 ssh -N -f -L 8000:localhost:8000 featurize@<IP> -p <端口>
 
-# 运行客户端
+# 运行客户端（XLeRobot 16-DOF）
 cd /home/zach/XLeRobot/smolvla_deploy
 conda activate lerobot
 python client.py --server-url http://localhost:8000 --task "clean table"
+
+# 或运行双臂客户端（12-DOF 仅手臂）
+cd /home/zach/XLeRobot
+conda activate lerobot
+export PYTHONPATH=/home/zach/XLeRobot/software/src:$PYTHONPATH
+python smolvla_deploy/client_bimanual.py --server-url http://localhost:8000 --task "fold the towel"
 ```
 
 ### 3.3 验证服务

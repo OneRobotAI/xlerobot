@@ -289,10 +289,16 @@ python server.py --model-path ~/smolvla_deploy/my_model --port 8000
 # SSH tunnel
 ssh -N -f -L 8000:localhost:8000 featurize@<ip> -p <port>
 
-# Run client
+# Run client (XLeRobot 16-DOF)
 cd /home/zach/XLeRobot/smolvla_deploy
 conda activate lerobot
 python client.py --server-url http://localhost:8000 --task "clean table"
+
+# Or run bimanual client (12-DOF arms only)
+cd /home/zach/XLeRobot
+conda activate lerobot
+export PYTHONPATH=/home/zach/XLeRobot/software/src:$PYTHONPATH
+python smolvla_deploy/client_bimanual.py --server-url http://localhost:8000 --task "fold the towel"
 ```
 
 ### 3.3 Verify Service
