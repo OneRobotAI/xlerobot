@@ -443,7 +443,7 @@ def main():
         try:
             subprocess.run(
                 ["v4l2-ctl", "-d", cam_dev,
-                 "--set-ctrl", "auto_exposure=3",
+                 "--set-ctrl", "auto_exposure=0",
                  "--set-ctrl", "white_balance_automatic=1",
                  "--set-ctrl", "brightness=0",
                  "--set-ctrl", "contrast=5",
