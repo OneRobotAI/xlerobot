@@ -27,4 +27,4 @@
 
 <video src="https://github.com/OneRobotAI/xlerobot/raw/main/docs/en/source/fold_tower.mp4" controls width="100%" style="max-width: 800px;"></video>
 
-*XLeRobot 使用 X-VLA 叠毛巾*
+*XLeRobot 使用 SmolVLA 叠毛巾*
