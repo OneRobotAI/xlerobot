@@ -416,18 +416,17 @@ def main():
         },
     )
 
-    # 固定摄像头参数，确保每次启动画面一致
+    # 固定摄像头参数，确保每次启动画面一致（如果画面颜色异常，可以注释掉这段）
     import subprocess
     for cam_dev in ["/dev/video0", "/dev/video2", "/dev/video4"]:
         try:
             subprocess.run(
                 ["v4l2-ctl", "-d", cam_dev,
-                 "--set-ctrl", "white_balance_automatic=0",
-                 "--set-ctrl", "white_balance_temperature=4600",
                  "--set-ctrl", "auto_exposure=3",
-                 "--set-ctrl", "saturation=56",
+                 "--set-ctrl", "white_balance_automatic=1",
                  "--set-ctrl", "brightness=0",
-                 "--set-ctrl", "contrast=3"],
+                 "--set-ctrl", "contrast=5",
+                 "--set-ctrl", "saturation=64"],
                 capture_output=True, timeout=5
             )
         except Exception:

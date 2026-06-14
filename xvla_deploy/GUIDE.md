@@ -124,6 +124,32 @@ XLeRobot dataset camera keys differ from what X-VLA expects. Use `--rename-map`:
 
 > `action_mode=auto` automatically detects action dimensions (12 or 16), no manual config needed.
 
+> **⚠️ Important: Fix State Dimension**
+> X-VLA base models (`xvla-folding`, `xvla-base`) have `state_dim=8`, but XLeRobot has **16-DOF** (2-wheel) or **17-DOF** (3-wheel). Without fixing this, the state gets truncated during training, causing poor inference.
+>
+> **Fix before training:**
+>
+> ```bash
+> # 2-wheel diff drive (16-DOF) — outputs to patched_models/
+> bash /home/zach/XLeRobot/shared/patch_state_dim.sh
+>
+> # 3-wheel omni (17-DOF)
+> bash /home/zach/XLeRobot/shared/patch_state_dim.sh --dof 17
+>
+> # From xvla-base
+> bash /home/zach/XLeRobot/shared/patch_state_dim.sh --model lerobot/xvla-base
+> bash /home/zach/XLeRobot/shared/patch_state_dim.sh --model lerobot/xvla-base --dof 17
+>
+> # Custom output path
+> bash /home/zach/XLeRobot/shared/patch_state_dim.sh --model-path /my/models/xvla-state16
+> ```
+>
+> Then train with the patched model:
+> ```bash
+> bash train.sh --model-path patched_models/xvla-folding-state16 --dataset ...
+> ```
+> The script only changes one line in `config.json`: `state_dim: 8 → 16 (or 17)`. Patched models are saved in `shared/patched_models/` (persistent across reboots).
+
 #### Training Examples
 
 **Cloth folding (unfrozen vision encoder, no Hub upload):**
